@@ -95,10 +95,9 @@ class SequenceBatcherTest(unittest.TestCase):
 
         if (("savedmodel" in trial) or ("graphdef" in trial) or
             ("netdef" in trial) or ("custom" in trial) or
-            ("onnx" in trial) or ("libtorch" in trial)):
+            ("onnx" in trial) or ("libtorch" in trial) or 
+	        ("plan" in trial)):
             tensor_shape = (1,)
-        elif "plan" in trial:
-            tensor_shape = (1,1,1)
         else:
             self.assertFalse(True, "unknown trial type: " + trial)
 
@@ -245,10 +244,9 @@ class SequenceBatcherTest(unittest.TestCase):
 
         if (("savedmodel" in trial) or ("graphdef" in trial) or
             ("netdef" in trial) or ("custom" in trial) or
-            ("onnx" in trial) or ("libtorch" in trial)):
+            ("onnx" in trial) or ("libtorch" in trial) or
+            ("plan" in trial)):
             tensor_shape = (1,)
-        elif "plan" in trial:
-            tensor_shape = (1,1,1)
         else:
             self.assertFalse(True, "unknown trial type: " + trial)
 
