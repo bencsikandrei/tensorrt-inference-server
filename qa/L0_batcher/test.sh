@@ -111,7 +111,7 @@ for model_type in $types; do
             test_multi_same_output1 \
             test_multi_different_outputs \
             test_multi_different_output_order ; do
-        SERVER_ARGS="--model-repository=`pwd`/$MODEL_PATH"
+        SERVER_ARGS="--model-repository=`pwd`/$MODEL_PATH --log-verbose=1"
         SERVER_LOG="./$i.$model_type.serverlog"
         run_server
         if [ "$SERVER_PID" == "0" ]; then
