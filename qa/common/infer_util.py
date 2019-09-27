@@ -57,7 +57,7 @@ def _range_repr_dtype(dtype):
 
 def _match_registered(registered_shm_regions, shm_name, byte_size):
     if shm_name in registered_shm_regions:
-        if byte_size < registered_shm_regions[shm_name][0]:
+        if byte_size == registered_shm_regions[shm_name][0]:
             return True
     else:
         return False
