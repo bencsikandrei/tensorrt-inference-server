@@ -335,8 +335,10 @@ HTTPAPIServer::ResponseAlloc(
 
     auto pr = output_shm_map.find(tensor_name);
     if (pr != output_shm_map.end()) {
-      // check for byte size mismatch
-      if (byte_size != pr->second.second) {
+      // If byte size of output is greater than requested registered shared
+      // memory region then throw an error. Allow regions that are larger or
+      // equal to the byte size of output.
+      if (byte_size > pr->second.second) {
         return TRTSERVER_ErrorNew(
             TRTSERVER_ERROR_INTERNAL,
             std::string(

@@ -982,11 +982,13 @@ class InferContext:
         # An input's data may be specified as a list of numpy arrays,
         # or as a shared memory handle.
         for inp_name, inp in inputs.items():
-            if not isinstance(inp, (list, tuple)) and type(inp) != c_void_p:
+            if (not isinstance(inp, (list, tuple))) and (type(inp) != c_void_p):
                 _raise_error("input '" + inp_name +
                              "' values must be specified as a list of numpy arrays" \
                              " or as a single c_void_p representing the shared memory handle")
             if type(inp) != c_void_p:
+                if (len(inp) == 2) and (type(inp[0]) == c_void_p) and (isinstance(inp[1], (list, tuple))):
+                    continue
                 for ip in inp:
                     if not isinstance(ip, (np.ndarray, tuple)):
                         _raise_error("input '" + inp_name +
@@ -1063,7 +1065,7 @@ class InferContext:
                                 # followed by the actual string characters.
                                 # All strings are concatenated together in "C"
                                 # order.
-                                if input_value.dtype == np.object or input_value.dtype.type == np.bytes_:
+                                if (input_value.dtype == np.object) or (input_value.dtype.type == np.bytes_):
                                     flattened = bytes()
                                     for obj in np.nditer(input_value, flags=["refs_ok"], order='C'):
                                         # If directly passing bytes to STRING type,
@@ -1085,6 +1087,18 @@ class InferContext:
                                         _crequest_infer_ctx_input_set_raw(
                                             input, input_value.ctypes.data_as(c_void_p),
                                             c_uint64(input_value.size * input_value.itemsize))))
+                    # For variable size tensors, need the shape as well as the
+                    # shared memory handle
+                    elif isinstance(input_values[1], (list, tuple)) and (type(input_values[0]) == c_void_p):
+                        shape_value = np.asarray(input_values[1], dtype=np.int64)
+                        _raise_if_error(
+                            c_void_p(
+                                _crequest_infer_ctx_input_set_shape(
+                                       input, shape_value, c_uint64(shape_value.size))))
+                        _raise_if_error(
+                            c_void_p(
+                                _crequest_infer_ctx_input_set_shared_memory(
+                                    input, input_values[0])))
                 else:
                     _raise_if_error(
                         c_void_p(
@@ -1218,31 +1232,45 @@ class InferContext:
                         c_void_p(_crequest_get_shared_memory_handle_info(output_format[1], \
                                 byref(shm_addr), byref(shm_key), byref(shm_fd), \
                                 byref(offset), byref(byte_size))))
+                    if (np.prod(shape) * np.dtype(result_dtype).itemsize) < int(byte_size.value/batch_size):
+                        element_byte_size = np.prod(shape) * np.dtype(result_dtype).itemsize
+                    else:
+                        element_byte_size = int(byte_size.value/batch_size)
                     start_pos = offset.value
-                    for b in range(batch_size):
+                    if result_dtype != np.object:
                         cval = shm_addr
-                        cval_len = start_pos + int(byte_size.value/batch_size)
-                        if cval_len == 0:
-                            val = np.empty(shape, dtype=result_dtype)
-                            results[output_name].append(val)
-                        else:
-                            val_buf = cast(cval, POINTER(c_byte * cval_len))[0]
-
-                            if result_dtype != np.object:
-                                val = np.frombuffer(val_buf, dtype=result_dtype, offset=start_pos)
+                        for b in range(batch_size):
+                            cval_len = start_pos + element_byte_size
+                            if cval_len == 0:
+                                val = np.empty(shape, dtype=result_dtype)
+                                results[output_name].append(val)
                             else:
-                                strs = list()
-                                offset = 0
-                                while offset < len(val_buf):
-                                    l = struct.unpack_from("<I", val_buf, start_pos)[0]
-                                    offset += 4
-                                    sb = struct.unpack_from("<{}s".format(l), val_buf, start_pos)[0]
-                                    offset += l
-                                    strs.append(sb)
-                                val = np.array(strs, dtype=object)
+                                val_buf = cast(cval, POINTER(c_byte * cval_len))[0]
+                                val = np.frombuffer(val_buf, dtype=result_dtype, offset=start_pos)
 
                             # Reshape the result to the appropriate shape
-                            start_pos += int(byte_size.value/batch_size)
+                            start_pos += element_byte_size
+                            shaped = np.reshape(val, shape)
+                            results[output_name].append(shaped)
+                    else:
+                        cval = shm_addr
+                        str_offset = start_pos
+                        val_buf = cast(cval, POINTER(c_byte * byte_size.value))[0]
+                        b = 0
+                        while b < batch_size:
+                            ii = 0
+                            strs = list()
+                            while (ii % np.prod(shape) != 0) or (ii == 0):
+                                l = struct.unpack_from("<I", val_buf, str_offset)[0]
+                                str_offset += 4
+                                sb = struct.unpack_from("<{}s".format(l), val_buf, str_offset)[0]
+                                str_offset += l
+                                strs.append(sb)
+                                ii+=1
+                            b+=1
+
+                            # Reshape the result to the appropriate shape
+                            val = np.array(strs, dtype=object)
                             shaped = np.reshape(val, shape)
                             results[output_name].append(shaped)
                 else:
