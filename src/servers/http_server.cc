@@ -335,9 +335,8 @@ HTTPAPIServer::ResponseAlloc(
 
     auto pr = output_shm_map.find(tensor_name);
     if (pr != output_shm_map.end()) {
-      // If byte size of output is greater than requested registered shared
-      // memory region then throw an error. Allow regions that are larger or
-      // equal to the byte size of output.
+      // If the output is in shared memory then check that the expected buffer
+      // size is at least the byte size of the output.
       if (byte_size > pr->second.second) {
         return TRTSERVER_ErrorNew(
             TRTSERVER_ERROR_INTERNAL,
